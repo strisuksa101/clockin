@@ -1,0 +1,720 @@
+﻿<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบลงเวลาปฏิบัติงาน</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jQuery (จำเป็นสำหรับ Select2) -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Select2 -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Signature Pad -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        
+        /* ปรับแต่ง Select2 ให้เข้ากับ Tailwind */
+        .select2-container .select2-selection--single {
+            height: 42px !important;
+            border: 1px solid #d1d5db !important;
+            border-radius: 0.375rem !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px !important;
+        }
+        
+        /* Loading Spinner */
+        #loader { backdrop-filter: blur(3px); }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Loader -->
+    <div id="loader" class="fixed inset-0 bg-gray-900/50 z-50 flex flex-col items-center justify-center hidden">
+        <div class="spinner mb-4"></div>
+        <div class="text-white font-bold" id="loader-text">กำลังประมวลผล...</div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VIEW: หน้าลงเวลาสำหรับผู้ใช้งาน (User) -->
+    <!-- ========================================== -->
+    <div id="view-user" class="container mx-auto p-4 max-w-lg min-h-screen flex flex-col justify-center">
+        <div class="bg-white shadow-xl rounded-2xl p-6 md:p-8">
+            <div class="text-center mb-6">
+                <i class="fa-solid fa-clock text-4xl text-blue-600 mb-2"></i>
+                <h1 class="text-2xl font-bold">ลงเวลาปฏิบัติงาน</h1>
+            </div>
+            
+            <!-- นาฬิกา -->
+            <div class="bg-gray-50 border border-gray-200 rounded-lg py-4 mb-6 text-center">
+                <div class="text-sm text-gray-500 mb-1" id="date-display">--/--/----</div>
+                <div id="clock" class="text-4xl font-mono font-bold text-blue-600 tracking-wider">00:00:00</div>
+            </div>
+            
+            <!-- ส่วนที่แสดงแบบฟอร์ม (จะถูกซ่อนถ้านอกเวลา) -->
+            <div id="form-container" class="space-y-5">
+                <!-- Dropdown 1: กลุ่มสาระ -->
+                <div>
+                    <label class="block text-sm font-semibold mb-1">กลุ่มสาระ / อื่นๆ</label>
+                    <select id="dept-select" class="w-full border-gray-300 rounded-md p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        <option value="">-- เลือกกลุ่มสาระ --</option>
+                    </select>
+                </div>
+                
+                <!-- Dropdown 2: ชื่อ-สกุล (ซ่อนก่อน) -->
+                <div id="name-container" class="hidden">
+                    <label class="block text-sm font-semibold mb-1">ชื่อ-สกุล</label>
+                    <select id="name-select" class="w-full" style="width: 100%;">
+                        <option value="">-- เลือกชื่อ --</option>
+                    </select>
+                </div>
+                
+                <!-- Canvas ลายเซ็น (ซ่อนก่อน) -->
+                <div id="sig-container" class="hidden">
+                    <label class="block text-sm font-semibold mb-1 flex justify-between items-end">
+                        ลายเซ็นของคุณ
+                        <button id="clear-sig" class="text-xs text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded">
+                            <i class="fa-solid fa-eraser"></i> ล้าง
+                        </button>
+                    </label>
+                    <canvas id="sig-pad" class="border border-gray-300 rounded-lg w-full h-48 touch-none bg-white shadow-inner"></canvas>
+                </div>
+                
+                <!-- ปุ่มบันทึก -->
+                <button id="btn-submit" class="hidden w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-3 font-bold text-lg transition shadow-lg">
+                    <i class="fa-solid fa-check-circle mr-2"></i> ลงเวลาปฏิบัติงาน
+                </button>
+            </div>
+
+            <!-- ส่วนแจ้งเตือนนอกเวลาทำการ (จะแสดงถ้านอกเวลา) -->
+            <div id="closed-container" class="hidden text-center py-8">
+                <i class="fa-solid fa-store-slash text-6xl text-red-400 mb-4"></i>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">นอกเวลาทำการ</h2>
+                <p class="text-gray-600 text-lg">ระบบเปิดให้ลงเวลาตั้งแต่<br><span class="font-bold text-blue-600">05:00 น. ถึง 17:00 น.</span></p>
+            </div>
+        </div>
+        
+        <div class="text-center mt-6">
+            <a href="#" id="link-admin" class="text-sm text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-lock"></i> สำหรับผู้ดูแลระบบ</a>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VIEW: หน้าผู้ดูแลระบบ (Admin) -->
+    <!-- ========================================== -->
+    <div id="view-admin" class="hidden bg-gray-100 min-h-screen pb-10">
+        
+        <!-- Admin Login Overlay -->
+        <div id="admin-login-overlay" class="fixed inset-0 bg-gray-900/80 z-40 flex items-center justify-center">
+            <div class="bg-white p-8 rounded-xl shadow-2xl max-w-sm w-full">
+                <h2 class="text-xl font-bold text-center mb-6"><i class="fa-solid fa-user-shield text-blue-600"></i> เข้าสู่ระบบ Admin</h2>
+                <input type="text" id="login-user" placeholder="Username" class="w-full border p-2 rounded mb-3 outline-none">
+                <input type="password" id="login-pass" placeholder="Password" class="w-full border p-2 rounded mb-4 outline-none">
+                <button id="btn-login" class="w-full bg-gray-800 text-white p-2 rounded hover:bg-gray-900 font-bold">เข้าสู่ระบบ</button>
+                <div class="text-center mt-4">
+                    <a href="#" id="link-back-user" class="text-sm text-gray-500 hover:underline">กลับไปหน้าลงเวลา</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Dashboard -->
+        <div id="admin-dashboard" class="hidden container mx-auto p-4 max-w-6xl mt-6">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-lg shadow">
+                <h1 class="text-2xl font-bold text-gray-800 mb-2 md:mb-0"><i class="fa-solid fa-chart-pie text-blue-600 mr-2"></i> สรุปผลการลงเวลา</h1>
+                <button id="btn-logout" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold text-sm">
+                    <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
+                </button>
+            </div>
+            
+            <!-- Filter วันที่ -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">เลือกวันที่ต้องการดูผล</label>
+                    <input type="date" id="admin-date" class="border border-gray-300 rounded p-2 outline-none focus:border-blue-500">
+                </div>
+                <button id="btn-filter" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded font-bold shadow">
+                    <i class="fa-solid fa-filter"></i> ดึงข้อมูล
+                </button>
+            </div>
+            
+            <!-- Cards สรุป -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-blue-500 flex justify-between items-center">
+                    <div>
+                        <div class="text-gray-500 text-sm font-bold">จำนวนบุคลากรทั้งหมด</div>
+                        <div class="text-3xl font-bold text-gray-800 mt-1" id="count-total">0</div>
+                    </div>
+                    <i class="fa-solid fa-users text-4xl text-gray-200"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-green-500 flex justify-between items-center">
+                    <div>
+                        <div class="text-gray-500 text-sm font-bold">ลงเวลาทั้งหมด (รวมสาย)</div>
+                        <div class="text-3xl font-bold text-green-600 mt-1" id="count-in">0</div>
+                    </div>
+                    <i class="fa-solid fa-check-double text-4xl text-gray-200"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-orange-500 flex justify-between items-center">
+                    <div>
+                        <div class="text-gray-500 text-sm font-bold">มาสาย (หลัง 08:30)</div>
+                        <div class="text-3xl font-bold text-orange-600 mt-1" id="count-late">0</div>
+                    </div>
+                    <i class="fa-solid fa-clock text-4xl text-gray-200"></i>
+                </div>
+                <div class="bg-white p-5 rounded-lg shadow border-l-4 border-red-500 flex justify-between items-center">
+                    <div>
+                        <div class="text-gray-500 text-sm font-bold">ยังไม่ลงเวลา</div>
+                        <div class="text-3xl font-bold text-red-600 mt-1" id="count-missing">0</div>
+                    </div>
+                    <i class="fa-solid fa-user-xmark text-4xl text-gray-200"></i>
+                </div>
+            </div>
+            
+            <!-- สรุปแยกกลุ่มสาระ -->
+            <div class="bg-white p-5 rounded-lg shadow mb-6">
+                <h3 class="font-bold text-gray-700 mb-3"><i class="fa-solid fa-layer-group"></i> สัดส่วนการลงเวลาแยกตามกลุ่มสาระ/อื่นๆ</h3>
+                <div id="dept-summary" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 text-sm">
+                    <!-- ข้อมูลจะถูก render ที่นี่ -->
+                </div>
+            </div>
+            
+            <!-- ตารางข้อมูล -->
+            <div class="bg-white p-5 rounded-lg shadow">
+                <div class="flex flex-col md:flex-row gap-3 mb-4">
+                    <select id="pageSize" class="border rounded p-2 bg-gray-50 outline-none w-full md:w-auto">
+                        <option value="5">แสดง 5 รายการ</option>
+                        <option value="10" selected>แสดง 10 รายการ</option>
+                        <option value="20">แสดง 20 รายการ</option>
+                        <option value="50">แสดง 50 รายการ</option>
+                        <option value="all">แสดงทั้งหมด</option>
+                    </select>
+                    <select id="filter-status" class="border rounded p-2 bg-gray-50 outline-none w-full md:w-auto">
+                        <option value="all">สถานะทั้งหมด</option>
+                        <option value="in_all">ลงเวลาแล้ว (รวมปกติ+สาย)</option>
+                        <option value="in">ลงเวลาแล้ว (ปกติ)</option>
+                        <option value="late">ลงเวลาแล้ว (สาย)</option>
+                        <option value="missing">ยังไม่ลงเวลา</option>
+                    </select>
+                    <select id="filter-dept" class="border rounded p-2 bg-gray-50 outline-none w-full md:w-auto">
+                        <option value="all">กลุ่มสาระทั้งหมด</option>
+                    </select>
+                    <input type="text" id="search-name" placeholder="ค้นหาชื่อ..." class="border rounded p-2 flex-grow bg-gray-50 outline-none">
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse whitespace-nowrap">
+                        <thead>
+                            <tr class="bg-gray-800 text-white">
+                                <th class="p-3 border-b rounded-tl-lg">ลำดับ</th>
+                                <th class="p-3 border-b">ชื่อ-สกุล</th>
+                                <th class="p-3 border-b">กลุ่มสาระ/อื่นๆ</th>
+                                <th class="p-3 border-b text-center">สถานะ</th>
+                                <th class="p-3 border-b text-center">ลายเซ็น</th>
+                                <th class="p-3 border-b rounded-tr-lg">เวลาบันทึก</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr><td colspan="6" class="text-center p-6 text-gray-400">ยังไม่มีข้อมูล โปรดเลือกวันที่และกดดึงข้อมูล</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ส่วนควบคุมหน้า (Pagination) -->
+                <div class="flex flex-col md:flex-row justify-between items-center mt-4 bg-gray-50 p-3 rounded border gap-3">
+                    <div class="text-sm text-gray-600" id="page-info">แสดง 0 ถึง 0 จาก 0 รายการ</div>
+                    <div class="flex gap-2">
+                        <button id="btn-prev" class="px-3 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50 shadow-sm"><i class="fa-solid fa-chevron-left"></i> ก่อนหน้า</button>
+                        <button id="btn-next" class="px-3 py-1 border rounded bg-white hover:bg-gray-100 disabled:opacity-50 shadow-sm">ถัดไป <i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- สคริปต์ควบคุมระบบ (JavaScript) -->
+    <!-- ========================================== -->
+    <script>
+        // ⚠️⚠️⚠️ สำคัญมาก: นำ Web App URL ของคุณมาใส่ที่ตัวแปรด้านล่างนี้ ⚠️⚠️⚠️
+        const API_URL = "https://script.google.com/macros/s/AKfycbxg7lG92ofX4xCUAao4Z3rCDiSNpvVvuBWpQspS0Zff0dcUKzPfovVLmsQx3j3fgri1Rg/exec"; 
+        
+        // สถานะของระบบ
+        let signaturePad;
+        let userLocation = "";
+        let globalAdminData = [];
+        let currentPage = 1;
+
+        // ==========================================
+        // 1. ระบบผู้ใช้งาน (User Frontend)
+        // ==========================================
+        
+        $(document).ready(function() {
+            if (API_URL === "YOUR_WEB_APP_URL_HERE") {
+                Swal.fire('แจ้งเตือน', 'กรุณานำ Web App URL ที่ได้จาก Apps Script มาใส่ในไฟล์ HTML บรรทัดที่ 207 ก่อนทดสอบใช้งาน', 'warning');
+            }
+
+            // เริ่มทำงานนาฬิกา
+            initClock();
+            
+            // โหลดกลุ่มสาระเริ่มต้น
+            loadDepartments();
+
+            // ตั้งค่า Signature Pad
+            const canvas = document.getElementById('sig-pad');
+            signaturePad = new SignaturePad(canvas, {
+                backgroundColor: 'rgb(255, 255, 255)' // สีขาว เพื่อให้บีบอัดเป็น JPEG ได้สมบูรณ์
+            });
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // จัดการ Event เมื่อเลือกกลุ่มสาระ
+            $('#dept-select').on('change', function() {
+                const dept = $(this).val();
+                if (dept) {
+                    loadNames(dept);
+                    $('#name-container').removeClass('hidden');
+                    // ซ่อนปุ่มกับลายเซ็นไปก่อนหากเปลี่ยนกลุ่มสาระ
+                    $('#sig-container').addClass('hidden');
+                    $('#btn-submit').addClass('hidden');
+                } else {
+                    $('#name-container').addClass('hidden');
+                    $('#sig-container').addClass('hidden');
+                    $('#btn-submit').addClass('hidden');
+                }
+            });
+
+            // จัดการ Event เมื่อเลือกชื่อ (ใช้ Select2)
+            $('#name-select').select2({ placeholder: "-- เลือกรายชื่อเพื่อค้นหา --" });
+            $('#name-select').on('change', function() {
+                if ($(this).val()) {
+                    $('#sig-container').removeClass('hidden');
+                    $('#btn-submit').removeClass('hidden');
+                    resizeCanvas(); // วาดใหม่เผื่อ canvas เพี้ยนตอนซ่อน
+                    getLocation();  // ขอพิกัดทันทีเมื่อเลือกชื่อเสร็จ
+                } else {
+                    $('#sig-container').addClass('hidden');
+                    $('#btn-submit').addClass('hidden');
+                }
+            });
+
+            // ปุ่มล้างลายเซ็น
+            $('#clear-sig').on('click', () => signaturePad.clear());
+
+            // ปุ่มส่งข้อมูล (ลงเวลา)
+            $('#btn-submit').on('click', submitData);
+
+            // เมนูนำทาง
+            $('#link-admin').on('click', () => toggleView('admin'));
+            $('#link-back-user').on('click', () => toggleView('user'));
+        });
+
+        // นาฬิกา
+        function initClock() {
+            setInterval(() => {
+                const now = new Date();
+                $('#clock').text(now.toLocaleTimeString('th-TH', { hour12: false }));
+                
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                $('#date-display').text(now.toLocaleDateString('th-TH', options));
+
+                // เช็คเวลาทำการ (เปิด 05:00 - 17:00)
+                const currentHour = now.getHours();
+                if (currentHour < 5 || currentHour >= 17) {
+                    $('#form-container').addClass('hidden');
+                    $('#closed-container').removeClass('hidden');
+                } else {
+                    $('#form-container').removeClass('hidden');
+                    $('#closed-container').addClass('hidden');
+                }
+            }, 1000);
+        }
+
+        // ดึงข้อมูลกลุ่มสาระจาก API
+        async function loadDepartments() {
+            showLoader("กำลังโหลดข้อมูล...");
+            try {
+                const res = await fetch(`${API_URL}?action=getDepartments`);
+                const depts = await res.json();
+                const select = $('#dept-select');
+                depts.forEach(d => select.append(new Option(d, d)));
+            } catch (err) {
+                console.error("Load Dept Error:", err);
+                Swal.fire('เชื่อมต่อล้มเหลว', 'ไม่สามารถดึงข้อมูลกลุ่มสาระได้ กรุณาตรวจสอบ URL ของระบบ', 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // ดึงรายชื่อตามกลุ่มสาระจาก API
+        async function loadNames(dept) {
+            showLoader("กำลังโหลดรายชื่อ...");
+            try {
+                const res = await fetch(`${API_URL}?action=getNames&dept=${encodeURIComponent(dept)}`);
+                const names = await res.json();
+                const select = $('#name-select');
+                select.empty().append(new Option('', '')); // เคลียร์ของเก่า
+                names.forEach(n => select.append(new Option(n, n)));
+            } catch (err) {
+                Swal.fire('ผิดพลาด', 'ดึงรายชื่อล้มเหลว', 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // ฟังก์ชันขอพิกัดสถานที่
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => { userLocation = `${pos.coords.latitude},${pos.coords.longitude}`; },
+                    (err) => { console.warn("ผู้ใช้ไม่อนุญาตให้เข้าถึงตำแหน่ง"); },
+                    { timeout: 10000 }
+                );
+            }
+        }
+
+        // ปรับขนาด Canvas ให้ไม่เบลอ
+        function resizeCanvas() {
+            const canvas = document.getElementById('sig-pad');
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+            signaturePad.clear();
+        }
+
+        // ฟังก์ชันสร้างรูปแบบวันที่ DD/MM/YYYY
+        function getFormattedDate(dateObj) {
+            const d = dateObj.getDate().toString().padStart(2, '0');
+            const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+            const y = dateObj.getFullYear();
+            return `${d}/${m}/${y}`;
+        }
+
+        // บันทึกข้อมูล
+        async function submitData() {
+            const dept = $('#dept-select').val();
+            const name = $('#name-select').val();
+
+            if (!name || !dept) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกชื่อและกลุ่มสาระ', 'warning');
+            if (signaturePad.isEmpty()) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเซ็นชื่อก่อนบันทึก', 'warning');
+
+            const now = new Date();
+            const dateStr = getFormattedDate(now);
+            const timeStr = now.toLocaleTimeString('th-TH', { hour12: false });
+            
+            // บีบอัดรูปลายเซ็นเป็น JPEG คุณภาพ 50%
+            const signatureBase64 = signaturePad.toDataURL('image/jpeg', 0.5);
+
+            const payload = {
+                name: name,
+                dept: dept,
+                signature: signatureBase64,
+                date: dateStr,
+                time: timeStr,
+                location: userLocation
+            };
+
+            showLoader("กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ...");
+            try {
+                // ส่งแบบ Text/Plain เพื่อหลีกเลี่ยง CORS Preflight ที่หน้าเว็บฝั่ง GitHub
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+                });
+                const result = await res.json();
+                
+                hideLoader();
+                if (result.success) {
+                    Swal.fire({
+                        title: 'สำเร็จ!',
+                        html: `<b>คุณ ${name}</b><br>ได้ลงเวลาปฏิบัติงานแล้วในวันนี้<br>เวลา <b>${result.time}</b>`,
+                        icon: 'success',
+                        confirmButtonText: 'ตกลง'
+                    }).then(() => window.location.reload());
+                } else if (result.message === 'already_in') {
+                    Swal.fire('แจ้งเตือน', `คุณได้ลงเวลาไปแล้วในวันนี้เมื่อเวลา <b>${result.time}</b>`, 'info');
+                } else {
+                    Swal.fire('เกิดข้อผิดพลาด', result.error, 'error');
+                }
+            } catch (err) {
+                hideLoader();
+                Swal.fire('ขัดข้อง', 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ' + err, 'error');
+            }
+        }
+
+        // ==========================================
+        // 2. ระบบผู้ดูแลระบบ (Admin Dashboard)
+        // ==========================================
+
+        // Admin Event Listeners
+        $('#btn-login').on('click', () => {
+            if ($('#login-user').val() === 'admin' && $('#login-pass').val() === '123') {
+                $('#admin-login-overlay').addClass('hidden');
+                $('#admin-dashboard').removeClass('hidden');
+                // เซ็ตวันที่เป็นวันนี้
+                const today = new Date().toISOString().split('T')[0];
+                $('#admin-date').val(today);
+                fetchAdminData();
+            } else {
+                Swal.fire('ผิดพลาด', 'Username หรือ Password ไม่ถูกต้อง', 'error');
+            }
+        });
+
+        $('#btn-logout').on('click', () => {
+            $('#login-user').val(''); $('#login-pass').val('');
+            $('#admin-dashboard').addClass('hidden');
+            $('#admin-login-overlay').removeClass('hidden');
+        });
+
+        $('#btn-filter').on('click', fetchAdminData);
+        $('#filter-status, #filter-dept, #search-name').on('input change', () => {
+            currentPage = 1; // รีเซ็ตหน้ากลับไปหน้าที่ 1 เสมอเมื่อมีการค้นหา/กรอง
+            renderAdminTable(globalAdminData);
+        });
+        
+        $('#pageSize').on('change', () => {
+            currentPage = 1;
+            renderAdminTable(globalAdminData);
+        });
+
+        $('#btn-prev').on('click', () => {
+            if (currentPage > 1) { 
+                currentPage--; 
+                renderAdminTable(globalAdminData); 
+            }
+        });
+
+        $('#btn-next').on('click', () => {
+            currentPage++; 
+            renderAdminTable(globalAdminData);
+        });
+
+        // ดึงข้อมูล Admin
+        async function fetchAdminData() {
+            const dateInput = $('#admin-date').val(); // ได้รูปแบบ YYYY-MM-DD
+            if (!dateInput) return;
+            
+            // แปลงเป็น DD/MM/YYYY ให้ตรงกับที่บันทึก
+            const parts = dateInput.split('-');
+            const dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            
+            showLoader("กำลังประมวลผลข้อมูล...");
+            try {
+                const res = await fetch(`${API_URL}?action=getAdminData&date=${encodeURIComponent(dateStr)}`);
+                const result = await res.json();
+                
+                if (result.success) {
+                    globalAdminData = result.data;
+                    populateAdminDepts(globalAdminData);
+                    renderAdminTable(globalAdminData);
+                } else {
+                    Swal.fire('ผิดพลาด', result.error, 'error');
+                }
+            } catch (err) {
+                Swal.fire('ผิดพลาด', 'ดึงข้อมูลล้มเหลว', 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // เติมตัวกรองกลุ่มสาระในหน้า Admin
+        function populateAdminDepts(data) {
+            const depts = [...new Set(data.map(item => item.dept))].filter(Boolean);
+            const select = $('#filter-dept');
+            select.html('<option value="all">กลุ่มสาระทั้งหมด</option>');
+            depts.forEach(d => select.append(new Option(d, d)));
+        }
+
+        // แสดงผลข้อมูลและคำนวณสถิติ
+        function renderAdminTable(data) {
+            const tbody = $('#table-body');
+            tbody.empty();
+            
+            const filterStatus = $('#filter-status').val();
+            const filterDept = $('#filter-dept').val();
+            const searchName = $('#search-name').val().toLowerCase();
+
+            let inCount = 0, missingCount = 0, lateCount = 0;
+            const deptStats = {};
+            let filteredList = [];
+
+            data.forEach((item, index) => {
+                // คำนวณสถิติรวมทั้งหมด (ไม่ต้องสนใจตัวกรองตาราง)
+                if (!deptStats[item.dept]) deptStats[item.dept] = { total: 0, in: 0 };
+                deptStats[item.dept].total++;
+                
+                let isLate = false;
+                if (item.status === 'in') {
+                    inCount++; // นับยอดรวมคนที่ลงเวลา (ปกติ + สาย)
+                    deptStats[item.dept].in++;
+                    if (item.time > "08:30:00") {
+                        isLate = true;
+                        lateCount++;
+                    }
+                } else {
+                    missingCount++;
+                }
+
+                // กรองข้อมูลสำหรับแสดงในตาราง
+                let show = true;
+                if (filterDept !== 'all' && item.dept !== filterDept) show = false;
+                if (searchName && !item.name.toLowerCase().includes(searchName)) show = false;
+                
+                if (filterStatus !== 'all') {
+                    if (filterStatus === 'in_all' && item.status !== 'in') show = false; // เอาแค่คนที่ลงเวลา (ทั้งปกติและสาย)
+                    if (filterStatus === 'in' && (item.status !== 'in' || isLate)) show = false; // มาปกติ
+                    if (filterStatus === 'late' && (!isLate || item.status !== 'in')) show = false; // สาย
+                    if (filterStatus === 'missing' && item.status !== 'missing') show = false; // ขาด
+                }
+
+                if (show) {
+                    filteredList.push({ ...item, isLate, originalIndex: index + 1 });
+                }
+            });
+
+            // อัปเดตตัวเลข Cards
+            $('#count-total').text(data.length);
+            $('#count-in').text(inCount);
+            $('#count-late').text(lateCount);
+            $('#count-missing').text(missingCount);
+
+            // คำนวณระบบแบ่งหน้า (Pagination)
+            const pageSize = $('#pageSize').val();
+            let startIndex = 0;
+            let endIndex = filteredList.length;
+            
+            if (pageSize !== 'all') {
+                const limit = parseInt(pageSize);
+                const maxPage = Math.ceil(filteredList.length / limit) || 1;
+                if (currentPage > maxPage) currentPage = maxPage;
+                
+                startIndex = (currentPage - 1) * limit;
+                endIndex = startIndex + limit;
+                if (endIndex > filteredList.length) endIndex = filteredList.length;
+                
+                $('#btn-prev').prop('disabled', currentPage === 1);
+                $('#btn-next').prop('disabled', currentPage === maxPage);
+            } else {
+                $('#btn-prev').prop('disabled', true);
+                $('#btn-next').prop('disabled', true);
+            }
+
+            const itemsToShow = filteredList.slice(startIndex, endIndex);
+
+            if (itemsToShow.length === 0) {
+                tbody.append('<tr><td colspan="6" class="text-center p-6 text-gray-400">ไม่พบข้อมูลที่ค้นหา</td></tr>');
+            } else {
+                itemsToShow.forEach((item, index) => {
+                    let statusHtml = '';
+                    if (item.status === 'in') {
+                        statusHtml = item.isLate 
+                            ? '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold"><i class="fa-solid fa-clock"></i> สาย</span>'
+                            : '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold"><i class="fa-solid fa-check"></i> ปกติ</span>';
+                    } else {
+                        statusHtml = '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold"><i class="fa-solid fa-xmark"></i> ยังไม่ลงเวลา</span>';
+                    }
+                    
+                    // เปลี่ยนจากแท็ก <a> เป็น <button> และเรียกฟังก์ชัน showSignature
+                    const signHtml = item.signUrl 
+                        ? `<button onclick="showSignature('${item.signUrl}', '${item.name}')" class="inline-block bg-blue-100 text-blue-600 p-2 rounded hover:bg-blue-200 transition shadow-sm" title="คลิกเพื่อดูรูปลายเซ็น"><i class="fa-solid fa-file-signature"></i> ดูลายเซ็น</button>` 
+                        : '<span class="text-gray-300">-</span>';
+
+                    // คำนวณลำดับที่แสดงผล (คำนึงถึงเลขหน้าด้วย)
+                    const displayIndex = startIndex + index + 1;
+
+                    tbody.append(`
+                        <tr class="border-b hover:bg-gray-50 transition">
+                            <td class="p-3 border-b text-center text-gray-500">${displayIndex}</td>
+                            <td class="p-3 border-b font-medium">${item.name}</td>
+                            <td class="p-3 border-b text-sm text-gray-600">${item.dept}</td>
+                            <td class="p-3 border-b text-center">${statusHtml}</td>
+                            <td class="p-3 border-b text-center">${signHtml}</td>
+                            <td class="p-3 border-b font-mono text-sm text-gray-600">${item.time}</td>
+                        </tr>
+                    `);
+                });
+            }
+
+            // อัปเดตข้อความบอกจำนวนหน้า
+            if (filteredList.length > 0) {
+                $('#page-info').text(`แสดง ${startIndex + 1} ถึง ${endIndex} จากทั้งหมด ${filteredList.length} รายการ`);
+            } else {
+                $('#page-info').text(`แสดง 0 รายการ`);
+            }
+
+            // อัปเดต Summary กลุ่มสาระ
+            const deptContainer = $('#dept-summary');
+            deptContainer.empty();
+            for (const [dept, stats] of Object.entries(deptStats)) {
+                const isComplete = stats.in === stats.total;
+                deptContainer.append(`
+                    <div class="bg-gray-50 border border-gray-200 p-2 rounded flex flex-col justify-center items-center text-center">
+                        <span class="text-xs text-gray-500 mb-1 truncate w-full" title="${dept}">${dept}</span> 
+                        <span class="font-bold text-lg ${isComplete ? 'text-green-600' : 'text-orange-500'}">
+                            ${stats.in} <span class="text-sm text-gray-400">/ ${stats.total}</span>
+                        </span>
+                    </div>
+                `);
+            }
+        }
+
+        // ==========================================
+        // UI & Utils Functions
+        // ==========================================
+        
+        // ฟังก์ชันสำหรับแสดงรูปลายเซ็นใน SweetAlert
+        function showSignature(url, name) {
+            Swal.fire({
+                title: `ลายเซ็นของ ${name}`,
+                imageUrl: url,
+                imageAlt: 'Signature',
+                confirmButtonText: 'ปิดหน้าต่าง',
+                confirmButtonColor: '#3b82f6',
+                customClass: {
+                    image: 'border border-gray-200 rounded-lg shadow-sm max-h-64 object-contain bg-white'
+                }
+            });
+        }
+
+        function toggleView(view) {
+            if (view === 'admin') {
+                $('#view-user').addClass('hidden');
+                $('#view-admin').removeClass('hidden');
+            } else {
+                $('#view-admin').addClass('hidden');
+                $('#view-user').removeClass('hidden');
+            }
+        }
+
+        function showLoader(text = "กำลังประมวลผล...") {
+            $('#loader-text').text(text);
+            $('#loader').removeClass('hidden');
+        }
+
+        function hideLoader() {
+            $('#loader').addClass('hidden');
+        }
+
+    </script>
+</body>
+</html>
