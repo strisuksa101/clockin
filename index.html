@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
@@ -60,9 +60,11 @@
     <!-- ========================================== -->
     <div id="view-user" class="container mx-auto p-4 max-w-lg min-h-screen flex flex-col justify-center">
         <div class="bg-white shadow-xl rounded-2xl p-6 md:p-8">
-            <div class="text-center mb-6">
-                <i class="fa-solid fa-clock text-4xl text-blue-600 mb-2"></i>
-                <h1 class="text-2xl font-bold">ลงเวลาปฏิบัติงาน</h1>
+            <div class="text-center mb-6 flex flex-col items-center">
+                <!-- รูปโลโก้ ปรับขนาดด้วย w-24 h-24 (ประมาณ 96x96px) -->
+                <img src="https://lh5.googleusercontent.com/d/1mKmI8_PDFyWPRnkBA_u5_8tTkQGf05mK" alt="Logo" class="h-24  object-cover mb-4 shadow-sm">
+                
+                <h1 class="text-2xl font-bold"><i class="fa-solid fa-clock text-blue-600 mr-2"></i> ลงเวลาปฏิบัติงาน</h1>
             </div>
             
             <!-- นาฬิกา -->
@@ -73,26 +75,29 @@
             
             <!-- ส่วนที่แสดงแบบฟอร์ม (จะถูกซ่อนถ้านอกเวลา) -->
             <div id="form-container" class="space-y-5">
-                <!-- Dropdown 1: กลุ่มสาระ -->
+                
+                <!-- Dropdown 1: ชื่อ-สกุล (เลื่อนขึ้นมาอันดับ 1) -->
                 <div>
-                    <label class="block text-sm font-semibold mb-1">กลุ่มสาระ / อื่นๆ</label>
-                    <select id="dept-select" class="w-full border-gray-300 rounded-md p-2 border focus:ring-blue-500 focus:border-blue-500 outline-none">
-                        <option value="">-- เลือกกลุ่มสาระ --</option>
+                    <label class="block text-sm font-semibold mb-1">ค้นหาชื่อ-สกุล (Search by Name)</label>
+                    <select id="name-select" class="w-full" style="width: 100%;">
+                        <option value="">-- พิมพ์ชื่อเพื่อค้นหา --</option>
                     </select>
                 </div>
-                
-                <!-- Dropdown 2: ชื่อ-สกุล (ซ่อนก่อน) -->
-                <div id="name-container" class="hidden">
-                    <label class="block text-sm font-semibold mb-1">ชื่อ-สกุล</label>
-                    <select id="name-select" class="w-full" style="width: 100%;">
-                        <option value="">-- เลือกชื่อ --</option>
+
+                <!-- Dropdown 2: กลุ่มสาระ (จะ Auto-fill เมื่อเลือกชื่อ) -->
+                <div id="dept-container" class="hidden">
+                    <label class="block text-sm font-semibold mb-1 flex items-center justify-between">
+                        กลุ่มสาระ / อื่นๆ 
+                    </label>
+                    <select id="dept-select" class="w-full border-gray-300 rounded-md p-2 border outline-none bg-gray-100 cursor-not-allowed" disabled>
+                        <option value="">-- เลือกกลุ่มสาระ --</option>
                     </select>
                 </div>
                 
                 <!-- Canvas ลายเซ็น (ซ่อนก่อน) -->
                 <div id="sig-container" class="hidden">
                     <label class="block text-sm font-semibold mb-1 flex justify-between items-end">
-                        ลายเซ็นของคุณ
+                        ลงลายมื้อชื่อ(Signature)
                         <button id="clear-sig" class="text-xs text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded">
                             <i class="fa-solid fa-eraser"></i> ล้าง
                         </button>
@@ -259,9 +264,10 @@
         
         // สถานะของระบบ
         let signaturePad;
-        let userLocation = "";
         let globalAdminData = [];
         let currentPage = 1;
+        let staffDirectory = []; // เก็บรายชื่อและกลุ่มสาระทั้งหมด
+        let uniqueDepts = []; // เก็บกลุ่มสาระที่ไม่ซ้ำ
 
         // ==========================================
         // 1. ระบบผู้ใช้งาน (User Frontend)
@@ -272,56 +278,54 @@
                 Swal.fire('แจ้งเตือน', 'กรุณานำ Web App URL ที่ได้จาก Apps Script มาใส่ในไฟล์ HTML บรรทัดที่ 207 ก่อนทดสอบใช้งาน', 'warning');
             }
 
-            // เริ่มทำงานนาฬิกา
-            initClock();
+            initClock(); // เริ่มทำงานนาฬิกา
             
-            // โหลดกลุ่มสาระเริ่มต้น
-            loadDepartments();
+            // โหลดรายชื่อและกลุ่มสาระทั้งหมดรวดเดียว
+            loadInitialData();
 
             // ตั้งค่า Signature Pad
             const canvas = document.getElementById('sig-pad');
             signaturePad = new SignaturePad(canvas, {
-                backgroundColor: 'rgb(255, 255, 255)' // สีขาว เพื่อให้บีบอัดเป็น JPEG ได้สมบูรณ์
+                backgroundColor: 'rgb(255, 255, 255)' 
             });
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
-            // จัดการ Event เมื่อเลือกกลุ่มสาระ
-            $('#dept-select').on('change', function() {
-                const dept = $(this).val();
-                if (dept) {
-                    loadNames(dept);
-                    $('#name-container').removeClass('hidden');
-                    // ซ่อนปุ่มกับลายเซ็นไปก่อนหากเปลี่ยนกลุ่มสาระ
-                    $('#sig-container').addClass('hidden');
-                    $('#btn-submit').addClass('hidden');
-                } else {
-                    $('#name-container').addClass('hidden');
-                    $('#sig-container').addClass('hidden');
-                    $('#btn-submit').addClass('hidden');
-                }
+            // เปิดใช้ Select2 (เอา tags: true ออก เพื่อบล็อกการพิมพ์ชื่อใหม่)
+            $('#name-select').select2({ 
+                placeholder: "-- พิมพ์เพื่อค้นหาชื่อ-สกุล --"
             });
 
-            // จัดการ Event เมื่อเลือกชื่อ (ใช้ Select2)
-            $('#name-select').select2({ placeholder: "-- เลือกรายชื่อเพื่อค้นหา --" });
+            // จัดการ Event เมื่อเลือกชื่อ
             $('#name-select').on('change', function() {
-                if ($(this).val()) {
-                    $('#sig-container').removeClass('hidden');
-                    $('#btn-submit').removeClass('hidden');
-                    resizeCanvas(); // วาดใหม่เผื่อ canvas เพี้ยนตอนซ่อน
-                    getLocation();  // ขอพิกัดทันทีเมื่อเลือกชื่อเสร็จ
-                } else {
+                const selectedName = $(this).val();
+                
+                if (!selectedName) {
+                    $('#dept-container').addClass('hidden');
                     $('#sig-container').addClass('hidden');
                     $('#btn-submit').addClass('hidden');
+                    return;
+                }
+
+                // ค้นหาว่าชื่อนี้มีอยู่ในฐานข้อมูลหรือไม่
+                const staff = staffDirectory.find(s => s.name === selectedName);
+                
+                if (staff) {
+                    // **กรณีมีชื่อในระบบ:** ดึงกลุ่มสาระมาใส่ให้เลยและล็อคการแก้ไข
+                    $('#dept-select').val(staff.dept);
+                    $('#dept-container').removeClass('hidden');
+                    
+                    // แสดงพื้นที่เซ็นชื่อได้เลย
+                    $('#sig-container').removeClass('hidden');
+                    $('#btn-submit').removeClass('hidden');
+                    resizeCanvas();
                 }
             });
 
             // ปุ่มล้างลายเซ็น
             $('#clear-sig').on('click', () => signaturePad.clear());
-
             // ปุ่มส่งข้อมูล (ลงเวลา)
             $('#btn-submit').on('click', submitData);
-
             // เมนูนำทาง
             $('#link-admin').on('click', () => toggleView('admin'));
             $('#link-back-user').on('click', () => toggleView('user'));
@@ -348,46 +352,33 @@
             }, 1000);
         }
 
-        // ดึงข้อมูลกลุ่มสาระจาก API
-        async function loadDepartments() {
-            showLoader("กำลังโหลดข้อมูล...");
+        // ดึงข้อมูลรายชื่อทั้งหมดรวดเดียวจาก API
+        async function loadInitialData() {
+            showLoader("กำลังเข้าสู่ระบบลงเวลา...");
             try {
-                const res = await fetch(`${API_URL}?action=getDepartments`);
-                const depts = await res.json();
-                const select = $('#dept-select');
-                depts.forEach(d => select.append(new Option(d, d)));
+                const res = await fetch(`${API_URL}?action=getAllStaff`);
+                staffDirectory = await res.json();
+                
+                // ดึงเฉพาะกลุ่มสาระที่ไม่ซ้ำกัน
+                const deptSet = new Set(staffDirectory.map(s => s.dept).filter(Boolean));
+                uniqueDepts = [...deptSet].sort();
+
+                // ใส่ข้อมูลลง Dropdown ชื่อ (เรียงตามตัวอักษร)
+                const nameSelect = $('#name-select');
+                nameSelect.empty().append(new Option('', ''));
+                const sortedStaff = [...staffDirectory].sort((a, b) => a.name.localeCompare(b.name, 'th'));
+                sortedStaff.forEach(s => nameSelect.append(new Option(s.name, s.name)));
+
+                // ใส่ข้อมูลลง Dropdown กลุ่มสาระ
+                const deptSelect = $('#dept-select');
+                deptSelect.empty().append(new Option('', ''));
+                uniqueDepts.forEach(d => deptSelect.append(new Option(d, d)));
+
             } catch (err) {
-                console.error("Load Dept Error:", err);
-                Swal.fire('เชื่อมต่อล้มเหลว', 'ไม่สามารถดึงข้อมูลกลุ่มสาระได้ กรุณาตรวจสอบ URL ของระบบ', 'error');
+                console.error("Load Data Error:", err);
+                Swal.fire('เชื่อมต่อล้มเหลว', 'ไม่สามารถดึงข้อมูลรายชื่อได้ กรุณาตรวจสอบการเชื่อมต่อ', 'error');
             } finally {
                 hideLoader();
-            }
-        }
-
-        // ดึงรายชื่อตามกลุ่มสาระจาก API
-        async function loadNames(dept) {
-            showLoader("กำลังโหลดรายชื่อ...");
-            try {
-                const res = await fetch(`${API_URL}?action=getNames&dept=${encodeURIComponent(dept)}`);
-                const names = await res.json();
-                const select = $('#name-select');
-                select.empty().append(new Option('', '')); // เคลียร์ของเก่า
-                names.forEach(n => select.append(new Option(n, n)));
-            } catch (err) {
-                Swal.fire('ผิดพลาด', 'ดึงรายชื่อล้มเหลว', 'error');
-            } finally {
-                hideLoader();
-            }
-        }
-
-        // ฟังก์ชันขอพิกัดสถานที่
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => { userLocation = `${pos.coords.latitude},${pos.coords.longitude}`; },
-                    (err) => { console.warn("ผู้ใช้ไม่อนุญาตให้เข้าถึงตำแหน่ง"); },
-                    { timeout: 10000 }
-                );
             }
         }
 
@@ -401,7 +392,6 @@
             signaturePad.clear();
         }
 
-        // ฟังก์ชันสร้างรูปแบบวันที่ DD/MM/YYYY
         function getFormattedDate(dateObj) {
             const d = dateObj.getDate().toString().padStart(2, '0');
             const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
@@ -411,17 +401,17 @@
 
         // บันทึกข้อมูล
         async function submitData() {
-            const dept = $('#dept-select').val();
             const name = $('#name-select').val();
+            const dept = $('#dept-select').val(); // แม้จะถูก disable ก็ใช้ jQuery .val() ดึงค่าได้ปกติ
 
-            if (!name || !dept) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกชื่อและกลุ่มสาระ', 'warning');
-            if (signaturePad.isEmpty()) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเซ็นชื่อก่อนบันทึก', 'warning');
+            if (!name || !dept) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาระบุชื่อและกลุ่มสาระ', 'warning');
+            if (signaturePad.isEmpty()) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเซ็นชื่อก่อนบันทึก(Please sign before saving)', 'warning');
+
+            showLoader("กำลังบันทึกข้อมูล...");
 
             const now = new Date();
             const dateStr = getFormattedDate(now);
             const timeStr = now.toLocaleTimeString('th-TH', { hour12: false });
-            
-            // บีบอัดรูปลายเซ็นเป็น JPEG คุณภาพ 50%
             const signatureBase64 = signaturePad.toDataURL('image/jpeg', 0.5);
 
             const payload = {
@@ -430,12 +420,10 @@
                 signature: signatureBase64,
                 date: dateStr,
                 time: timeStr,
-                location: userLocation
+                location: "" // ยกเลิกการใช้ location แล้ว ส่งเป็นค่าว่างแทน
             };
 
-            showLoader("กำลังบันทึกข้อมูลและอัปโหลดรูปภาพ...");
             try {
-                // ส่งแบบ Text/Plain เพื่อหลีกเลี่ยง CORS Preflight ที่หน้าเว็บฝั่ง GitHub
                 const res = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify(payload),
@@ -465,13 +453,11 @@
         // ==========================================
         // 2. ระบบผู้ดูแลระบบ (Admin Dashboard)
         // ==========================================
-
-        // Admin Event Listeners
+        
         $('#btn-login').on('click', () => {
             if ($('#login-user').val() === 'admin' && $('#login-pass').val() === '123') {
                 $('#admin-login-overlay').addClass('hidden');
                 $('#admin-dashboard').removeClass('hidden');
-                // เซ็ตวันที่เป็นวันนี้
                 const today = new Date().toISOString().split('T')[0];
                 $('#admin-date').val(today);
                 fetchAdminData();
@@ -488,7 +474,7 @@
 
         $('#btn-filter').on('click', fetchAdminData);
         $('#filter-status, #filter-dept, #search-name').on('input change', () => {
-            currentPage = 1; // รีเซ็ตหน้ากลับไปหน้าที่ 1 เสมอเมื่อมีการค้นหา/กรอง
+            currentPage = 1; 
             renderAdminTable(globalAdminData);
         });
         
@@ -511,10 +497,9 @@
 
         // ดึงข้อมูล Admin
         async function fetchAdminData() {
-            const dateInput = $('#admin-date').val(); // ได้รูปแบบ YYYY-MM-DD
+            const dateInput = $('#admin-date').val(); 
             if (!dateInput) return;
             
-            // แปลงเป็น DD/MM/YYYY ให้ตรงกับที่บันทึก
             const parts = dateInput.split('-');
             const dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
             
@@ -559,13 +544,12 @@
             let filteredList = [];
 
             data.forEach((item, index) => {
-                // คำนวณสถิติรวมทั้งหมด (ไม่ต้องสนใจตัวกรองตาราง)
                 if (!deptStats[item.dept]) deptStats[item.dept] = { total: 0, in: 0 };
                 deptStats[item.dept].total++;
                 
                 let isLate = false;
                 if (item.status === 'in') {
-                    inCount++; // นับยอดรวมคนที่ลงเวลา (ปกติ + สาย)
+                    inCount++; 
                     deptStats[item.dept].in++;
                     if (item.time > "08:30:00") {
                         isLate = true;
@@ -575,16 +559,15 @@
                     missingCount++;
                 }
 
-                // กรองข้อมูลสำหรับแสดงในตาราง
                 let show = true;
                 if (filterDept !== 'all' && item.dept !== filterDept) show = false;
                 if (searchName && !item.name.toLowerCase().includes(searchName)) show = false;
                 
                 if (filterStatus !== 'all') {
-                    if (filterStatus === 'in_all' && item.status !== 'in') show = false; // เอาแค่คนที่ลงเวลา (ทั้งปกติและสาย)
-                    if (filterStatus === 'in' && (item.status !== 'in' || isLate)) show = false; // มาปกติ
-                    if (filterStatus === 'late' && (!isLate || item.status !== 'in')) show = false; // สาย
-                    if (filterStatus === 'missing' && item.status !== 'missing') show = false; // ขาด
+                    if (filterStatus === 'in_all' && item.status !== 'in') show = false; 
+                    if (filterStatus === 'in' && (item.status !== 'in' || isLate)) show = false; 
+                    if (filterStatus === 'late' && (!isLate || item.status !== 'in')) show = false; 
+                    if (filterStatus === 'missing' && item.status !== 'missing') show = false; 
                 }
 
                 if (show) {
@@ -592,13 +575,11 @@
                 }
             });
 
-            // อัปเดตตัวเลข Cards
             $('#count-total').text(data.length);
             $('#count-in').text(inCount);
             $('#count-late').text(lateCount);
             $('#count-missing').text(missingCount);
 
-            // คำนวณระบบแบ่งหน้า (Pagination)
             const pageSize = $('#pageSize').val();
             let startIndex = 0;
             let endIndex = filteredList.length;
@@ -634,12 +615,10 @@
                         statusHtml = '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold"><i class="fa-solid fa-xmark"></i> ยังไม่ลงเวลา</span>';
                     }
                     
-                    // เปลี่ยนจากแท็ก <a> เป็น <button> และเรียกฟังก์ชัน showSignature
                     const signHtml = item.signUrl 
                         ? `<button onclick="showSignature('${item.signUrl}', '${item.name}')" class="inline-block bg-blue-100 text-blue-600 p-2 rounded hover:bg-blue-200 transition shadow-sm" title="คลิกเพื่อดูรูปลายเซ็น"><i class="fa-solid fa-file-signature"></i> ดูลายเซ็น</button>` 
                         : '<span class="text-gray-300">-</span>';
 
-                    // คำนวณลำดับที่แสดงผล (คำนึงถึงเลขหน้าด้วย)
                     const displayIndex = startIndex + index + 1;
 
                     tbody.append(`
@@ -655,14 +634,12 @@
                 });
             }
 
-            // อัปเดตข้อความบอกจำนวนหน้า
             if (filteredList.length > 0) {
                 $('#page-info').text(`แสดง ${startIndex + 1} ถึง ${endIndex} จากทั้งหมด ${filteredList.length} รายการ`);
             } else {
                 $('#page-info').text(`แสดง 0 รายการ`);
             }
 
-            // อัปเดต Summary กลุ่มสาระ
             const deptContainer = $('#dept-summary');
             deptContainer.empty();
             for (const [dept, stats] of Object.entries(deptStats)) {
@@ -681,11 +658,8 @@
         // ==========================================
         // UI & Utils Functions
         // ==========================================
-        
-        // ฟังก์ชันสำหรับแสดงรูปลายเซ็นใน SweetAlert
         function showSignature(url, name) {
             Swal.fire({
-                title: `ลายเซ็นของ ${name}`,
                 imageUrl: url,
                 imageAlt: 'Signature',
                 confirmButtonText: 'ปิดหน้าต่าง',
