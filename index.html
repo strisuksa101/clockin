@@ -458,8 +458,13 @@
             if ($('#login-user').val() === 'admin' && $('#login-pass').val() === 'strisuksa@101') {
                 $('#admin-login-overlay').addClass('hidden');
                 $('#admin-dashboard').removeClass('hidden');
-                const today = new Date().toISOString().split('T')[0];
-                $('#admin-date').val(today);
+        // แก้ไขการดึงวันที่ให้ตรงกับโซนเวลาเครื่อง (หลีกเลี่ยงปัญหา UTC ที่ทำให้ย้อนไป 1 วัน)
+                const now = new Date();
+                const y = now.getFullYear();
+                const m = (now.getMonth() + 1).toString().padStart(2, '0');
+                const d = now.getDate().toString().padStart(2, '0');
+                $('#admin-date').val(`${y}-${m}-${d}`)
+
                 fetchAdminData();
             } else {
                 Swal.fire('ผิดพลาด', 'Username หรือ Password ไม่ถูกต้อง', 'error');
