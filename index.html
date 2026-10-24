@@ -350,7 +350,7 @@
                const currentHour = now.getHours();
                 const currentMinute = now.getMinutes(); // ดึงค่านาทีมาด้วย
                 // จะเข้าเงื่อนไขนี้ถ้าเวลา "ก่อน 8.30" หรือ "ตั้งแต่ 17.00 เป็นต้นไป"
-                if (currentHour < 22 || (currentHour === 22 && currentMinute < 20) || currentHour >= 24) {
+                if (currentHour < 22 || (currentHour === 22 && currentMinute < 20) || currentHour >= 23) {
                     $('#form-container').addClass('hidden');
                     $('#closed-container').removeClass('hidden');
                 } else {
