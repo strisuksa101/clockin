@@ -348,7 +348,7 @@
 
                 // เช็คเวลาทำการ (เปิด 05:00 - 17:00)
                 const currentHour = now.getHours();
-                if (currentHour < 5 || currentHour >= 22) {
+                if (currentHour < 5 || currentHour >= 17) {
                     $('#form-container').addClass('hidden');
                     $('#closed-container').removeClass('hidden');
                 } else {
