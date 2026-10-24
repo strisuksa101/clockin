@@ -115,7 +115,7 @@
             <div id="closed-container" class="hidden text-center py-8">
                 <i class="fa-solid fa-store-slash text-6xl text-red-400 mb-4"></i>
                 <h2 class="text-2xl font-bold text-gray-800 mb-2">นอกเวลาทำการ</h2>
-                <p class="text-gray-600 text-lg">ระบบเปิดให้ลงเวลา<br><span class="font-bold text-blue-600">05:00 น. เป็นต้นไป</span></p>
+                <p class="text-gray-600 text-lg">ระบบเปิดให้ลงเวลา<br><span class="font-bold text-blue-600">08:30 น. เป็นต้นไป</span></p>
             </div>
         </div>
         
@@ -350,7 +350,7 @@
                const currentHour = now.getHours();
                 const currentMinute = now.getMinutes(); // ดึงค่านาทีมาด้วย
                 // จะเข้าเงื่อนไขนี้ถ้าเวลา "ก่อน 8.30" หรือ "ตั้งแต่ 17.00 เป็นต้นไป"
-                if (currentHour < 22 || (currentHour === 22 && currentMinute < 35) || currentHour >= 23) {
+                if (currentHour < 8 || (currentHour === 8 && currentMinute < 30) || currentHour >= 13) {
                     $('#form-container').addClass('hidden');
                     $('#closed-container').removeClass('hidden');
                 } else {
