@@ -347,8 +347,10 @@
                 $('#date-display').text(now.toLocaleDateString('th-TH', options));
 
                 // เช็คเวลาทำการ (เปิด 05:00 - 17:00)
-                const currentHour = now.getHours();
-                if (currentHour < 5 || currentHour >= 17) {
+               const currentHour = now.getHours();
+                const currentMinute = now.getMinutes(); // ดึงค่านาทีมาด้วย
+                // จะเข้าเงื่อนไขนี้ถ้าเวลา "ก่อน 8.30" หรือ "ตั้งแต่ 17.00 เป็นต้นไป"
+                if (currentHour < 22 || (currentHour === 22 && currentMinute < 15) || currentHour >= 17) {
                     $('#form-container').addClass('hidden');
                     $('#closed-container').removeClass('hidden');
                 } else {
